@@ -1,17 +1,19 @@
 package service
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	config "report/base"
 	"report/utils"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/api/option"
 )
 
 type DocumentRequest struct {
@@ -39,9 +41,9 @@ func GenerateReportSummary(c *gin.Context) {
 
 	fmt.Println(text)
 
-	summary, err := utils.SummarizeWithGemini("AIzaSyDcUWblqA1BeMdtJgYvjtpSXggG7D9PaNM", text, "english")
+	summary, err := utils.SummarizeWithGemini(config.LoadConfig().APIKey, text, "english")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate summary"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server is down"})
 		return
 	}
 
@@ -50,7 +52,6 @@ func GenerateReportSummary(c *gin.Context) {
 	})
 }
 
-// Helper: Extract text from PDF/DOCX/TXT
 func extractTextFromFile(filePath string) (string, error) {
 	switch strings.ToLower(filepath.Ext(filePath)) {
 	case ".pdf":
@@ -64,15 +65,13 @@ func extractTextFromFile(filePath string) (string, error) {
 	}
 }
 
-func handlePrediction(c *gin.Context) {
-	// Get uploaded image
+func HandlePrediction(c *gin.Context) {
 	file, err := c.FormFile("image")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No image uploaded"})
 		return
 	}
 
-	// Open the file
 	uploadedFile, err := file.Open()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read image"})
@@ -80,58 +79,56 @@ func handlePrediction(c *gin.Context) {
 	}
 	defer uploadedFile.Close()
 
-	// Read file data
 	imageData, err := io.ReadAll(uploadedFile)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process image"})
 		return
 	}
 
-	// Call Gemini API
 	prediction, err := callGeminiAPI(imageData)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI prediction failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server is down"})
 		return
 	}
 
-	// Return prediction
 	c.JSON(http.StatusOK, gin.H{"prediction": prediction})
 }
 
 func callGeminiAPI(imageData []byte) (string, error) {
-	// Replace with your Gemini API key
-	apiKey := os.Getenv("GEMINI_API_KEY")
+	apiKey := config.LoadConfig().APIKey
 	if apiKey == "" {
-		return "", fmt.Errorf("Gemini API key not set")
+		return "", fmt.Errorf("server went down")
 	}
 
-	// Initialize Gemini client
 	ctx := context.Background()
 	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create Gemini client: %w", err)
 	}
 	defer client.Close()
 
-	// Initialize model (Gemini Pro Vision)
-	model := client.GenerativeModel("gemini-pro-vision")
+	model := client.GenerativeModel("gemini-1.5-flash")
 
-	// Create image part
 	img := genai.ImageData("jpeg", imageData)
 
-	// Define prompt
-	prompt := "Analyze this medical image and suggest possible diseases. Be concise."
+	prompt := `You are a medical AI assistant. Analyze this image and:
+    1. List top 3 possible conditions
+    2. For each, provide:
+       - Confidence percentage (XX%)
+       - Key visual findings
+       - Urgency level (Low/Medium/High)
+    3. Always add: "Consult a healthcare professional for accurate diagnosis."`
 
-	// Generate response
 	resp, err := model.GenerateContent(ctx, img, genai.Text(prompt))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("API call failed: %w", err)
 	}
 
-	// Extract prediction
-	if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
-		return fmt.Sprintf("%v", resp.Candidates[0].Content.Parts[0]), nil
+	// Extract and format response
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "No diagnosis could be generated", nil
 	}
 
-	return "No prediction generated", nil
+	return fmt.Sprintf("%v", resp.Candidates[0].Content.Parts[0]), nil
+
 }

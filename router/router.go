@@ -10,5 +10,5 @@ func IntiateRoutes(router *gin.Engine) {
 
 	ApiGroup := router.Group("/api")
 	ApiGroup.POST("/summeriseReport", service.GenerateReportSummary)
-	ApiGroup.POST("/predict",service)
+	ApiGroup.POST("/predict", service.HandlePrediction)
 }
