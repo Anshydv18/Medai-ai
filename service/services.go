@@ -39,7 +39,6 @@ func GenerateReportSummary(c *gin.Context) {
 		return
 	}
 
-
 	summary, err := utils.SummarizeWithGemini(config.LoadConfig().APIKey, text, "english")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "server is down"})
@@ -111,9 +110,9 @@ func callGeminiAPI(imageData []byte) (string, error) {
 	img := genai.ImageData("jpeg", imageData)
 
 	prompt := `You are a medical AI assistant. Analyze this image and:
-    1. List top 3 possible conditions
+    1. List top 1 possible conditions
     2. For each, provide:
-       - Confidence percentage (XX%)
+        - precaution
        - Key visual findings
        - Urgency level (Low/Medium/High)
     3. Always add: "Consult a healthcare professional for accurate diagnosis."`
