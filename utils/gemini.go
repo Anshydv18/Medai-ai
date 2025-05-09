@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 )
 
 func SummarizeWithGemini(apiKey, text, language string) (string, error) {
 
 	// Updated API endpoint (as of May 2024)
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=%s", apiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s", apiKey)
 
 	requestBody := map[string]interface{}{
 		"contents": []map[string]interface{}{
@@ -38,6 +39,9 @@ func SummarizeWithGemini(apiKey, text, language string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		responseBody := new(bytes.Buffer)
+		responseBody.ReadFrom(resp.Body)
+		log.Printf("API Error - Status: %d, Response: %s", resp.StatusCode, responseBody.String())
 		return "", fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 

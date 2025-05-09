@@ -39,7 +39,6 @@ func GenerateReportSummary(c *gin.Context) {
 		return
 	}
 
-	fmt.Println(text)
 
 	summary, err := utils.SummarizeWithGemini(config.LoadConfig().APIKey, text, "english")
 	if err != nil {
